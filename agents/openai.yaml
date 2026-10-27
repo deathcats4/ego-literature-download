@@ -1,0 +1,4 @@
+interface:
+  display_name: "ego 文献下载"
+  short_description: "通过 ego lite 复用机构登录，下载并核验论文 PDF，保留实际访问路线和结果记录。"
+  default_prompt: "Use $ego-literature-download to download the requested paper through ego lite and verify its identity."

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+runtime/
+downloads/
+*.pdf
+*.png
+*.jpg
+*.log
+.env
