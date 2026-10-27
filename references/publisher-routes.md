@@ -38,7 +38,7 @@ These observations establish the tested papers and reused sessions, not all jour
 
 | Platform | Route hint |
 | --- | --- |
-| Elsevier / ScienceDirect | `View PDF` may open a native viewer on `pdf.sciencedirectassets.com`; wait for its visible Download control. A visible Turnstile challenge has been completed through ego Page APIs. Follow operable steps and recheck progress; hand off when it needs user-only input or stops progressing. |
+| Elsevier / ScienceDirect | Normal route: open the DOI/article page, confirm its title and DOI, then click the visible `View PDF` control. Wait for the PDF viewer to finish loading and expose its Download control; save from that viewer with `captureViewer` when the control is addressable through the current ego Page API. The viewer may be served from `pdf.sciencedirectassets.com`. Verify the saved candidate with `verify_pdf.py`. A visible Turnstile challenge is an interruption, not part of the normal route; follow the challenge guidance below when one appears. |
 | Nature | Use the visible Download PDF control. A `*_reference.pdf` URL can still lead to a readable article; verify the document's content and version. |
 | Springer Link | Follow the article's institution access flow (CARSI was used in a tested case). Recheck article-specific access after login; a retained session does not prove fresh-login support or universal coverage. |
 | Wiley / AGU | A security check and PDF entitlement are separate. The tested reader route exposed an observed `/doi/pdfdirect/<DOI>?download=true` link; capture on the actual destination Page. `ERR_ABORTED` can accompany a real download, so inspect the file. |
@@ -72,3 +72,13 @@ server byte total. An unlisted publisher returns `route_status: unlisted` and
 continues to live page observation or capture; it is not an unsupported verdict.
 The executable regression cases
 are in [`tests/test_publisher_route_policy.mjs`](../tests/test_publisher_route_policy.mjs).
+
+For Elsevier, `publisherRoute('elsevier')` encodes the reusable route stages:
+article PDF link, viewer load, then capture from the loaded viewer. It is a
+decision hint for the live workflow, not a page automation script. The reusable
+capture step is [`captureViewer`](../scripts/capture_viewer.mjs), which arms the
+download wait before clicking the observed viewer control and saves the result
+as an unverified candidate. PDF structure and article identity remain the
+responsibility of [`verify_pdf.py`](../scripts/verify_pdf.py). This split keeps
+stable steps reusable while leaving title/DOI checks and changing page controls
+to live observation.
