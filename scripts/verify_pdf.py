@@ -106,7 +106,7 @@ def read_document(path):
         "doi_evidence": [],
         "doi_match": None,
         "title_match": None,
-        "visual_check": "required",
+        "visual_check": "not_performed",
     }
     if not data.startswith(b"%PDF-"):
         result["error"] = "Missing PDF header"

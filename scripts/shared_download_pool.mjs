@@ -4,7 +4,6 @@ import {randomUUID} from 'node:crypto';
 import {mkdir, open, readFile, readdir, rename, rm, writeFile} from 'node:fs/promises';
 import {isAbsolute, join} from 'node:path';
 import {setTimeout as pause} from 'node:timers/promises';
-import {withDownloadCapture} from './capture_lock.mjs';
 import {assertDownloadsPageCompatible, downloadRecordIds, readDownloadHistory} from './collect_downloads.mjs';
 import {persistCandidate} from './persist_candidate.mjs';
 
@@ -36,10 +35,7 @@ async function entries(directory) {
 }
 async function sessionAt(sessionPath) {
   if (typeof sessionPath !== 'string' || !isAbsolute(sessionPath)) throw new TypeError('sessionPath must be absolute');
-  const session = await readJSON(sessionPath);
-  const lease = await readJSON(session.capture_lock.path);
-  if (lease.lease_id !== session.capture_lock.lease_id) throw new Error('pool_lease_mismatch');
-  return session;
+  return readJSON(sessionPath);
 }
 async function accepting(dir) {
   if ((await readJSON(join(dir,'control.json'))).state !== 'accepting') return false;
@@ -48,30 +44,23 @@ async function accepting(dir) {
 }
 
 export async function startDownloadPool({recordsPage, outputDir, browserVersion, workers,
-  allowedOrigins, baselineIds, lockPath} = {}) {
+  baselineIds} = {}) {
   if (recordsPage) await assertDownloadsPageCompatible(recordsPage);
   if (typeof outputDir !== 'string' || !isAbsolute(outputDir)) throw new TypeError('outputDir must be absolute');
   if (!Array.isArray(workers) || !workers.length || workers.some(w => !safeId(w))
       || new Set(workers).size !== workers.length) throw new TypeError('Unique worker IDs required');
-  if (!Array.isArray(allowedOrigins) || !allowedOrigins.length || allowedOrigins.some(origin => {
-    try { const url = new URL(origin); return url.protocol !== 'https:' || url.origin !== origin; }
-    catch { return true; }
-  })) throw new TypeError('Explicit HTTPS origins required');
   const sessionPath = join(outputDir, 'session.json');
-  const result = await withDownloadCapture(async () => {
-    // A new directory prevents merging attempts or silently replacing evidence.
-    await mkdir(outputDir);
-    await mkdir(join(outputDir,'attempts'));
-    await mkdir(join(outputDir,'worker-exits'));
-    const baseline = baselineIds ?? await downloadRecordIds(recordsPage);
-    await atomicJSON(join(outputDir,'control.json'), {state:'initializing'});
-    return {capture_status:'pool_started', session:{pool_id:randomUUID(), output_dir:outputDir,
-      started_ms:Date.now(), baseline_ids:baseline, workers, allowed_origins:allowedOrigins}};
-  }, lockPath === undefined ? {} : {lockPath});
-  if (result.capture_status !== 'pool_started') return result;
-  await exclusiveJSON(sessionPath, {...result.session, capture_lock:result.capture_lock});
+  // A new directory prevents merging attempts or silently replacing evidence.
+  await mkdir(outputDir);
+  await mkdir(join(outputDir,'attempts'));
+  await mkdir(join(outputDir,'worker-exits'));
+  const baseline = baselineIds ?? await downloadRecordIds(recordsPage);
+  await atomicJSON(join(outputDir,'control.json'), {state:'initializing'});
+  const session = {pool_id:randomUUID(), output_dir:outputDir,
+    started_ms:Date.now(), baseline_ids:baseline, workers};
+  await exclusiveJSON(sessionPath, session);
   await atomicJSON(join(outputDir,'control.json'), {state:'accepting'});
-  return {capture_status:'pool_started', session_path:sessionPath, capture_lock:result.capture_lock};
+  return {capture_status:'pool_started', session_path:sessionPath};
 }
 
 // Invoke inside the worker's ego CLI. Register before clicking; never use an SDK
@@ -132,7 +121,7 @@ export async function collectDownloadPool({sessionPath, recordsPage, readRecords
     pool_id:session.pool_id, started_ms:session.started_ms, ended_ms:ended,
     candidates:[...candidates.values()], records:[...seen.values()],
     rejected_records:[...rejected.values()], quarantined_records:[...quarantined.values()],
-    attempts, worker_exits:exits, failure_reason:failure, capture_lock:session.capture_lock,
+    attempts, worker_exits:exits, failure_reason:failure,
     round_exit_required:true});
   try {
     while (true) {
@@ -166,7 +155,8 @@ export async function collectDownloadPool({sessionPath, recordsPage, readRecords
         const eligible = typeof row.id === 'string' && row.id
           && Number.isFinite(row.started_ms) && row.started_ms >= session.started_ms - 2000
           && row.started_ms >= firstClick - 2000 && row.started_ms <= now + 2000
-          && session.allowed_origins.includes(row.origin) && row.removed === false;
+          && typeof row.origin === 'string' && row.origin.startsWith('https://')
+          && row.removed === false;
         if (!eligible) { quarantined.set(row.id,{...row,reason:'outside_pool_scope'}); continue; }
         quarantined.delete(row.id);
         const grew = !previous || Number(row.received_bytes) > Number(previous.received_bytes ?? 0);
@@ -229,7 +219,7 @@ export async function collectDownloadPool({sessionPath, recordsPage, readRecords
 }
 
 // Caller confirms the observer CLI really exited. Worker exit markers were
-// written separately after each worker's actual CLI exit. Lease stays retained.
+// written separately after each worker's actual CLI exit.
 export async function finalizeDownloadPool({sessionPath, collectorCliExitConfirmed} = {}) {
   const session = await sessionAt(sessionPath), dir = session.output_dir;
   if (collectorCliExitConfirmed !== true) throw new Error('collector_cli_exit_required');

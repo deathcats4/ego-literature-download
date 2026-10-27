@@ -2,7 +2,9 @@
 
 Store UTF-8 JSON and artifacts in the user's output directory or this project's ignored `runtime/runs/<timestamp>_<name>/`, outside tracked source files. Use absolute local artifact paths. Do not store credentials, cookies, tokens, complete signed links, or personal SSO screenshots.
 
-Required fields per paper:
+Use this full record for batches, recovery, user handoff, or reproducibility work. A routine single-paper download can be reported directly with its saved path, observed identity, PDF validity, page count, and any uncertainty.
+
+Required fields per paper in a full record:
 
 | Field | Meaning |
 | --- | --- |
@@ -27,7 +29,7 @@ For blocked or incomplete attempts, use null for unavailable observed identifier
 
 ## File outcome and evidence
 
-- `file_status=success` requires all of: observed browser download, structurally readable PDF, established paper identity, and a visual first-page check. The helper's `identity_match` alone cannot set this status. A DOI found only in references is not identity proof; the helper limits matching to the first two pages, and the visual check remains necessary.
+- `file_status=success` requires an observed browser download, a structurally readable PDF, and established paper identity with no unresolved conflict. A clear first-two-page DOI or title match can establish identity for an unambiguous text PDF. A visual first-page check is needed when text is insufficient, identity is ambiguous, the PDF is scanned, a cover may obscure the article, or strict visual review is requested. A DOI found only in references is not identity proof.
 - `file_status=unverified` means a saved candidate exists but one or more acceptance checks are incomplete or failed. Preserve the helper result and rejection reason, including invalid files or explicit identity conflicts; this is not a usable-PDF claim.
 - `file_status=missing` means no persistent candidate file was saved. An open viewer or temporary download path does not change that outcome.
 
@@ -41,7 +43,7 @@ InstSci's `oa_direct` and `publisher_open_pdf` describe retrieval paths this bro
 
 For example, a loaded viewer with no saved file has `file_status=missing`, `standard_status=capture_failed`, and `result_evidence=browser_verified` when the viewer state was inspected and recorded. A saved PDF with insufficient text and visual identity has `file_status=unverified` and `standard_status=identity_unresolved`.
 
-Keep the helper's `identity_status`, `primary_dois`, and `doi_evidence` with the file result; interpret them using [diagnosis](diagnostic-guide.md). A matching title does not override a conflicting primary DOI. Preserve save-helper results separately: `saved_candidate` is not verification, and a failed save can leave a partial or later complete file. Its `candidate_exists` is an observation at return time, not proof that pending writes have stopped. Confirm the failed CLI round has exited, then record the post-exit candidate state separately. Retain `capture_failed` and an unverified late file even if text identity passes; record recovery to a new path as a separate attempt. Preserve `cancel_status` and the helper's safe `cancel_error_kind` when available, without copying raw SDK exceptions.
+Keep the helper's `identity_status`, `primary_dois`, and `doi_evidence` with the file result when making a full record; interpret them using [diagnosis](diagnostic-guide.md). A matching title does not override a conflicting primary DOI. Preserve save-helper results separately: `saved_candidate` is not verification, and a failed save can leave a partial or later complete file. Its `candidate_exists` is an observation at return time, not proof that pending writes have stopped. Confirm the failed CLI round has exited, then record the post-exit candidate state separately. Retain `capture_failed` and an unverified late file even if text identity passes; record recovery to a new path as a separate attempt. Preserve `cancel_status` and the helper's safe `cancel_error_kind` when available, without copying raw SDK exceptions.
 
 ## Existing records
 
@@ -55,6 +57,6 @@ For a resumed assignment, retain the earlier challenge or capture failure in `pr
 
 ## Continuation checkpoint
 
-Before handing off for user action, save a `continuation` object in the local paper/run record: TaskSpace ID and name, known Page label, requested DOI/title, public article URL, last completed stage, required user action, and handoff timestamp. Persist whether handoff actually completed; a plan to hand off is not its receipt. Store authentication page titles/stages rather than SSO URLs, form values or screenshots containing credentials. If a capture round was involved, also retain its result/lease and whether that CLI has exited.
+Before handing off for user action, save a `continuation` object in the local paper/run record: TaskSpace ID and name, known Page label, requested DOI/title, public article URL, last completed stage, required user action, and handoff timestamp. Persist whether handoff actually completed; a plan to hand off is not its receipt. Store authentication page titles/stages rather than SSO URLs, form values or screenshots containing credentials. Older records may include a capture lease; current workflows do not create one.
 
 After user confirmation, record the new observation and any intervening missing-space result in `prior_attempts`. When replacement is authorized, preserve the old checkpoint and record the new space and authorization separately. Checkpoints locate work; they do not keep a TaskSpace alive or prove that authentication succeeded. Resume using [authentication continuation](diagnostic-guide.md#resume-after-user-authentication).

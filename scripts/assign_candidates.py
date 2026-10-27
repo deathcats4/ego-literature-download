@@ -2,7 +2,7 @@
 
 The plan has papers [{key, doi?, title?}], candidates [{candidate_path, sha256?,
 completion_evidence?, trigger_key?}], and optional visual_checks
-[{paper_key, sha256, passed:true}]. Copy only individually verified papers.
+[{paper_key, sha256, passed:true}]. Copy individually verified or auto-verified papers.
 """
 import argparse
 import hashlib
@@ -29,7 +29,7 @@ def has_provenance(copy, byte_count):
             or copy.get('cli_exit_confirmed') is False
             or copy.get('failure_reason')):
         return False
-    if copy.get('completion_evidence') == 'serialized_sdk_saveAs':
+    if copy.get('completion_evidence') in {'sdk_saveAs', 'serialized_sdk_saveAs'}:
         return (copy.get('capture_status') == 'saved_candidate'
                 and copy.get('round_exit_required') is False
                 and copy.get('cli_exit_confirmed') is True)
@@ -154,13 +154,17 @@ def assign_candidates(plan, *, output_dir=None):
         if len(possible) == 1 and possible[0]['matches'] == [key]:
             row = possible[0]
             provenance = [c for c in row['copies'] if has_provenance(c, row['bytes'])]
-            visual_pass = reviews.get((key, row['sha256']), False)
+            review_key = (key, row['sha256'])
+            visual_review = reviews.get(review_key)
+            visual_pass = visual_review is True
             result.update(sha256=row['sha256'], bytes=row['bytes'], pages=row['pages'],
-                          provenance=row['copies'], visual_status='passed' if visual_pass else 'pending',
-                          status='provenance_pending' if not provenance else 'verified' if visual_pass else 'visual_pending')
+                          provenance=row['copies'],
+                          visual_status='passed' if visual_pass else 'failed' if review_key in reviews else 'not_required',
+                          status='provenance_pending' if not provenance else
+                          'verified' if visual_pass else 'visual_review_failed' if review_key in reviews else 'auto_verified')
             if any(c.get('trigger_key') is not None and c['trigger_key'] != key for c in row['copies']):
                 mismatches.append(key)
-            if result['status'] == 'verified' and output_dir is not None:
+            if result['status'] in {'verified', 'auto_verified'} and output_dir is not None:
                 destination = output_dir / (key + '.pdf')
                 try:
                     data = Path(provenance[0]['candidate_path']).read_bytes()
@@ -179,8 +183,11 @@ def assign_candidates(plan, *, output_dir=None):
         assigned.append(result)
     verified = sum(p['status'] == 'verified' for p in assigned)
     extra = [r['sha256'] for r in rows if not r['matches']]
+    auto_verified = sum(p['status'] == 'auto_verified' for p in assigned)
+    accepted = verified + auto_verified
     return {'requested':len(papers), 'distinct_candidates':len(rows), 'verified':verified,
-            'batch_status':'complete' if verified == len(papers) and not extra and not errors else 'partial',
+            'auto_verified':auto_verified,
+            'batch_status':'complete' if accepted == len(papers) and not extra and not errors else 'partial',
             'missing':[p['key'] for p in assigned if p['status'] == 'missing'],
             'ambiguous':[p['key'] for p in assigned if p['status'] == 'ambiguous'],
             'unmatched_candidates':extra, 'candidate_errors':errors, 'trigger_mismatches':mismatches,
