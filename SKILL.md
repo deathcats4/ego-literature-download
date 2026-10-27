@@ -2,7 +2,7 @@
 name: ego-literature-download
 description: Download academic paper PDFs through ego lite using the user's existing publisher or institutional login. Use for a DOI, title, article URL, or list of papers, including school WebVPN access, visible browser downloads, and PDF identity verification. Keep this workflow independent of InstSci and its browser profiles.
 metadata:
-  version: "0.5.11"
+  version: "0.5.12"
 ---
 
 # Literature downloads through ego lite

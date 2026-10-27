@@ -5,7 +5,7 @@ import {mkdir, open, readFile, readdir, rename, rm, writeFile} from 'node:fs/pro
 import {isAbsolute, join} from 'node:path';
 import {setTimeout as pause} from 'node:timers/promises';
 import {withDownloadCapture} from './capture_lock.mjs';
-import {downloadRecordIds, readDownloadHistory} from './collect_downloads.mjs';
+import {assertDownloadsPageCompatible, downloadRecordIds, readDownloadHistory} from './collect_downloads.mjs';
 import {persistCandidate} from './persist_candidate.mjs';
 
 const readJSON = async path => JSON.parse(await readFile(path, 'utf8'));
@@ -49,7 +49,7 @@ async function accepting(dir) {
 
 export async function startDownloadPool({recordsPage, outputDir, browserVersion, workers,
   allowedOrigins, baselineIds, lockPath} = {}) {
-  if (browserVersion !== '0.6.1.13') throw new TypeError('downloads_ui_version_unverified');
+  if (recordsPage) await assertDownloadsPageCompatible(recordsPage);
   if (typeof outputDir !== 'string' || !isAbsolute(outputDir)) throw new TypeError('outputDir must be absolute');
   if (!Array.isArray(workers) || !workers.length || workers.some(w => !safeId(w))
       || new Set(workers).size !== workers.length) throw new TypeError('Unique worker IDs required');
@@ -120,6 +120,7 @@ export async function collectDownloadPool({sessionPath, recordsPage, readRecords
     if (!Number.isInteger(value) || value <= 0 || value > 2_147_483_647) throw new TypeError('Invalid pool budget');
   }
   const session = await sessionAt(sessionPath), dir = session.output_dir;
+  if (recordsPage) await assertDownloadsPageCompatible(recordsPage);
   // Retained marker prevents a second observer or blind replay after an error.
   await exclusiveJSON(join(dir,'observer.json'),{started_ms:Date.now()});
   const seen = new Map(), candidates = new Map(), rejected = new Map(), quarantined = new Map();

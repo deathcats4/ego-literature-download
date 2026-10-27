@@ -9,6 +9,44 @@ import {persistCandidate} from './persist_candidate.mjs';
 const ACCESS_STATES = new Set(['access_unavailable', 'human_verification_required',
   'viewer_requires_save', 'consent_required', 'page_not_ready']);
 
+const DOWNLOAD_RECORD_FIELDS = ['id', 'url', 'filePath', 'state', 'started', 'total', 'percent'];
+
+// The downloads page is an undocumented browser surface. Check the DOM and
+// record shape at runtime instead of treating one Ego version as a proxy for
+// compatibility. An empty history can still be checked for the required host
+// and scroll container; record fields are checked whenever a row is present.
+export async function probeDownloadsPage(page) {
+  if (!page || typeof page.evaluate !== 'function') throw new TypeError('recordsPage must support evaluate');
+  try {
+    return await page.evaluate(fields => {
+      const manager = document.querySelector('downloads-manager');
+      const root = manager?.shadowRoot;
+      const container = root?.querySelector('#mainContainer');
+      const rows = root ? [...root.querySelectorAll('downloads-item')] : [];
+      const row = rows.find(item => item?.data && typeof item.data === 'object');
+      const missing = row ? fields.filter(field => !(field in row.data)) : [];
+      return {
+        has_manager: !!manager,
+        has_shadow_root: !!root,
+        has_container: !!container,
+        row_count: rows.length,
+        missing_fields: missing,
+        state_values: rows.map(item => String(item.data?.state ?? '')).filter(Boolean),
+      };
+    }, DOWNLOAD_RECORD_FIELDS);
+  } catch {
+    throw new TypeError('downloads_ui_unverified');
+  }
+}
+
+export async function assertDownloadsPageCompatible(page) {
+  const probe = await probeDownloadsPage(page);
+  if (!probe.has_shadow_root || !probe.has_container || probe.missing_fields.length) {
+    throw new TypeError('downloads_ui_unverified');
+  }
+  return probe;
+}
+
 export async function prepareArticle(page, url, {readySelector, timeoutMs = 15_000} = {}) {
   if (!readySelector) throw new TypeError('An observed readySelector is required');
   let navigationTimedOut = false;
@@ -130,7 +168,7 @@ export async function readDownloadHistory(page, baselineIds, {
 export async function collectDownloads({items, recordsPage, outputDir, browserVersion,
   baselineIds, readRecords, lockPath, startTimeoutMs = 30_000, idleTimeoutMs = 90_000,
   pollMs = 500, maxWaitMs = null} = {}) {
-  if (browserVersion !== '0.6.1.13') throw new TypeError('downloads_ui_version_unverified');
+  if (recordsPage) await assertDownloadsPageCompatible(recordsPage);
   if (typeof outputDir !== 'string' || !isAbsolute(outputDir)) throw new TypeError('outputDir must be absolute');
   if (!Array.isArray(items) || !items.length || new Set(items.map(i => i.key)).size !== items.length
       || items.some(i => !i.key || !i.page)) throw new TypeError('Unique keyed article Pages are required');
